@@ -2,6 +2,7 @@ import { DataSource } from "typeorm";
 import { env } from "./env.config";
 import { User } from "../entities/User.entity";
 import { RefreshToken } from "../entities/RefreshToken.entity";
+import { Project } from "../entities/Project.entity";
 
 export const AppDataSource = new DataSource({
     type: "postgres",
@@ -12,7 +13,7 @@ export const AppDataSource = new DataSource({
     database: env.DB_NAME,
     synchronize: true,
     // logging: env.NODE_ENV === "development" ? ["query", "error"] : ["error"],
-    entities: [User, RefreshToken],
+    entities: [User, RefreshToken, Project],
     migrations: ["src/migrations/*.ts"],
     subscribers: [],
 });

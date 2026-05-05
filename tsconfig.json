@@ -17,17 +17,12 @@
         "noUnusedLocals": false,
         "noImplicitAny": true,
         "strictNullChecks": true,
-        "baseUrl": "./src",
-        "typeRoots": ["./node_modules/@types", "./src/types"],
-        "paths": {
-            "@config/*": ["config/*"],
-            "@entities/*": ["entities/*"],
-            "@modules/*": ["modules/*"],
-            "@middleware/*": ["middleware/*"],
-            "@utils/*": ["utils/*"],
-            "@types/*": ["types/*"]
-        }
+        "typeRoots": ["./node_modules/@types", "./src/types"]
     },
+    "ts-node": {
+        "files": true
+    },
+    "files": ["./src/types/express.d.ts"],
     "include": ["src/**/*"],
     "exclude": ["node_modules", "dist"]
 }

@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from "express";
 import passport from "../config/passport.config";
 import { env } from "../config/env.config";
+import { AuthUser } from "../interfaces/auth.interface";
 
 export const googleAuth = passport.authenticate("google", {
     session: false,
@@ -15,7 +16,7 @@ export const googleAuthCallback = (
     passport.authenticate(
         "google",
         { session: false },
-        (err: Error | null, result: unknown) => {
+        (err: Error | null, result: AuthUser | false) => {
             if (err) return next(err);
             if (!result) {
                 return res.redirect(
@@ -24,7 +25,7 @@ export const googleAuthCallback = (
                     )}`,
                 );
             }
-            req.user = result as Express.Request["user"];
+            req.user = result;
             next();
         },
     )(req, res, next);
@@ -43,7 +44,7 @@ export const githubAuthCallback = (
     passport.authenticate(
         "github",
         { session: false },
-        (err: Error | null, result: unknown) => {
+        (err: Error | null, result: AuthUser | false) => {
             if (err) return next(err);
             if (!result) {
                 return res.redirect(
@@ -52,7 +53,7 @@ export const githubAuthCallback = (
                     )}`,
                 );
             }
-            req.user = result as Express.Request["user"];
+            req.user = result;
             next();
         },
     )(req, res, next);

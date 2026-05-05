@@ -1,6 +1,6 @@
 import { createHash } from "crypto";
 import { AppDataSource } from "../../config/db.config";
-import { User, AuthProvider } from "../../entities/User.entity";
+import { User, AuthProvider, Plans } from "../../entities/User.entity";
 import { RefreshToken } from "../../entities/RefreshToken.entity";
 import { AppError } from "../../utils/AppError";
 import {
@@ -24,6 +24,7 @@ import type {
 } from "./auth.schema";
 
 import bcrypt from "bcryptjs";
+import { AuthUser } from "../../interfaces/auth.interface";
 
 const userRepo = () => AppDataSource.getRepository(User);
 const tokenRepo = () => AppDataSource.getRepository(RefreshToken);
@@ -40,18 +41,11 @@ const PROVIDER_LABEL: Record<string, string> = {
 const sha256 = (value: string): string =>
     createHash("sha256").update(value).digest("hex");
 
-export type SafeUser = Pick<
-    User,
-    "id" | "name" | "email" | "authProvider" | "isEmailVerified" | "createdAt"
->;
-
-const sanitize = (user: User): SafeUser => ({
+const sanitize = (user: User): AuthUser => ({
     id: user.id,
     name: user.name,
     email: user.email,
-    authProvider: user.authProvider,
-    isEmailVerified: user.isEmailVerified,
-    createdAt: user.createdAt,
+    plan: user.plan,
 });
 
 export interface TokenPair {
@@ -61,9 +55,11 @@ export interface TokenPair {
 
 export const issueTokenPair = async (
     userId: string,
+    name: string,
     email: string,
+    plan: Plans,
 ): Promise<TokenPair> => {
-    const accessToken = generateAccessToken(userId, email);
+    const accessToken = generateAccessToken(userId, name, email, plan);
     const rawRefreshToken = generateRefreshToken(userId);
 
     await tokenRepo().save(
@@ -96,9 +92,7 @@ const issueAndSendOtp = async (user: User): Promise<User> => {
 
 //signup
 
-export const signupService = async (
-    dto: SignupDto,
-): Promise<{ user: SafeUser }> => {
+export const signupService = async (dto: SignupDto): Promise<AuthUser> => {
     const existing = await userRepo().findOne({ where: { email: dto.email } });
 
     if (existing) {
@@ -130,13 +124,15 @@ export const signupService = async (
     );
 
     user = await issueAndSendOtp(user);
-    return { user: sanitize(user) };
+    const sanitizedUser = sanitize(user);
+
+    return sanitizedUser;
 };
 
 // login
 
 export type LoginResult =
-    | ({ user: SafeUser } & TokenPair)
+    | ({ user: AuthUser } & TokenPair)
     | { requiresVerification: true };
 
 export const loginService = async (dto: LoginDto): Promise<LoginResult> => {
@@ -178,13 +174,18 @@ export const loginService = async (dto: LoginDto): Promise<LoginResult> => {
         return { requiresVerification: true };
     }
 
-    const tokens = await issueTokenPair(user.id, user.email);
+    const tokens = await issueTokenPair(
+        user.id,
+        user.name,
+        user.email,
+        user.plan,
+    );
     return { user: sanitize(user), ...tokens };
 };
 
 export const verifyEmailService = async (
     dto: VerifyEmailDto,
-): Promise<{ user: SafeUser } & TokenPair> => {
+): Promise<{ user: AuthUser } & TokenPair> => {
     const user = await userRepo()
         .createQueryBuilder("user")
         .addSelect("user.emailVerificationCode")
@@ -239,7 +240,12 @@ export const verifyEmailService = async (
     user.emailVerificationAttempts = 0;
     await userRepo().save(user);
 
-    const tokens = await issueTokenPair(user.id, user.email);
+    const tokens = await issueTokenPair(
+        user.id,
+        user.name,
+        user.email,
+        user.plan,
+    );
     return { user: sanitize(user), ...tokens };
 };
 
@@ -287,7 +293,7 @@ export interface OAuthProfile {
 
 export const oauthLoginService = async (
     profile: OAuthProfile,
-): Promise<SafeUser> => {
+): Promise<AuthUser> => {
     const existing = await userRepo().findOne({
         where: { email: profile.email },
     });
@@ -303,8 +309,8 @@ export const oauthLoginService = async (
             );
         }
 
-        const sanitizedUser = sanitize(existing);
-        return sanitizedUser;
+        const { id, name, email, plan } = existing;
+        return { id, name, email, plan };
     }
 
     // new user
@@ -319,8 +325,8 @@ export const oauthLoginService = async (
         }),
     );
 
-    const sanitizedUser = sanitize(user);
-    return sanitizedUser;
+    const { id, name, email, plan } = user;
+    return { id, name, email, plan };
 };
 
 export const refreshService = async (rawToken: string): Promise<TokenPair> => {
@@ -356,7 +362,7 @@ export const refreshService = async (rawToken: string): Promise<TokenPair> => {
         throw new AppError(401, "Account not found. Please log in again.");
     }
 
-    return issueTokenPair(user.id, user.email);
+    return issueTokenPair(user.id, user.name, user.email, user.plan);
 };
 
 export const logoutService = async (rawToken: string) => {
@@ -369,12 +375,6 @@ export const logoutService = async (rawToken: string) => {
             hash: sha256(rawToken),
         })
         .execute();
-};
-
-export const getMeService = async (userId: string): Promise<SafeUser> => {
-    const user = await userRepo().findOne({ where: { id: userId } });
-    if (!user) throw new AppError(404, "User not found.");
-    return sanitize(user);
 };
 
 // deletes revoked and expired tokens. node cron calls this

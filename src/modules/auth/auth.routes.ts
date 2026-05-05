@@ -35,7 +35,7 @@ router.post("/signup", validate(signupSchema), controller.signup);
 
 router.post("/login", validate(loginSchema), controller.login);
 
-router.post("/logout", controller.logout);
+router.post("/logout", authenticate, controller.logout);
 
 router.post("/refresh", controller.refresh);
 

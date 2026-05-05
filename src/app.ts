@@ -9,10 +9,10 @@ import { env } from "./config/env.config";
 import { AppDataSource } from "./config/db.config";
 import "./config/passport.config";
 import authRoutes from "./modules/auth/auth.routes";
+import projectRoutes from "./modules/projects/project.routes";
 import { errorHandler } from "./middleware/error.middleware";
 
 const app = express();
-
 
 app.use(helmet());
 app.use(
@@ -28,8 +28,8 @@ app.use(express.json({ limit: "10kb" }));
 app.use(express.urlencoded({ extended: true, limit: "10kb" }));
 app.use(cookieParser());
 
-
 app.use("/api/auth", authRoutes);
+app.use("/api/project", projectRoutes);
 
 // Health check
 app.get("/health", (_req, res) => {
@@ -54,11 +54,13 @@ app.use(errorHandler);
 const start = async () => {
     try {
         await AppDataSource.initialize();
-        console.log("Database connected successfully.");
+        console.log("\n---------------------------------\n");
+        console.log("DATABASE CONNECTED SUCCSESFULLY");
 
         app.listen(env.PORT, () => {
-            console.log(`Server running on http://localhost:${env.PORT}`);
-            console.log(`Environment: ${env.NODE_ENV}`);
+            console.log(`SERVER: http://localhost:${env.PORT}`);
+            console.log(`ENVIRONMENT: ${env.NODE_ENV}`);
+            console.log("\n---------------------------------\n");
         });
     } catch (error) {
         console.error("Failed to start server:", error);

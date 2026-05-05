@@ -1,10 +1,13 @@
 import jwt, { SignOptions } from "jsonwebtoken";
 import { env } from "../config/env.config";
 import { randomUUID } from "crypto";
+import { Plans } from "../entities/User.entity";
 
 export interface AccessTokenPayload {
     sub: string;
+    name: string;
     email: string;
+    plan: Plans;
     type: "access";
 }
 
@@ -13,7 +16,6 @@ export interface RefreshTokenPayload {
     jti: string;
     type: "refresh";
 }
-
 
 export const parseDuration = (value: string): number => {
     const match = value.match(/^(\d+)([smhd])$/);
@@ -31,9 +33,19 @@ export const parseDuration = (value: string): number => {
 export const getRefreshTokenExpiry = (): Date =>
     new Date(Date.now() + parseDuration(env.JWT_REFRESH_EXPIRES_IN));
 
-
-export const generateAccessToken = (userId: string, email: string): string => {
-    const payload: AccessTokenPayload = { sub: userId, email, type: "access" };
+export const generateAccessToken = (
+    userId: string,
+    name: string,
+    email: string,
+    plan: Plans,
+): string => {
+    const payload: AccessTokenPayload = {
+        sub: userId,
+        email,
+        name,
+        plan,
+        type: "access",
+    };
     const options: SignOptions = {
         expiresIn: env.JWT_ACCESS_EXPIRES_IN as SignOptions["expiresIn"],
     };

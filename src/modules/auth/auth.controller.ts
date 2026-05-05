@@ -7,6 +7,7 @@ import {
 } from "../../utils/cookie.utils";
 import { AppError } from "../../utils/AppError";
 import * as authService from "./auth.service";
+import { AuthUser } from "../../interfaces/auth.interface";
 
 // local auth (email + password)
 export const signup = async (
@@ -15,8 +16,8 @@ export const signup = async (
     next: NextFunction,
 ) => {
     try {
-        const { user } = await authService.signupService(req.body);
-        res.status(201).json({
+        const user = await authService.signupService(req.body);
+        return res.status(201).json({
             success: true,
             message:
                 "Account created. Please check your email for a verification code.",
@@ -50,7 +51,7 @@ export const login = async (
 
         setRefreshTokenCookie(res, rawRefreshToken);
 
-        res.status(200).json({
+        return res.status(200).json({
             success: true,
             message: "Logged in successfully.",
             data: { accessToken, user },
@@ -71,7 +72,7 @@ export const logout = async (
             | undefined;
         if (rawToken) await authService.logoutService(rawToken);
         clearRefreshTokenCookie(res);
-        res.status(200).json({
+        return res.status(200).json({
             success: true,
             message: "Logged out successfully.",
             data: null,
@@ -98,7 +99,7 @@ export const refresh = async (
         const { accessToken, rawRefreshToken } =
             await authService.refreshService(rawToken);
         setRefreshTokenCookie(res, rawRefreshToken);
-        res.status(200).json({
+        return res.status(200).json({
             success: true,
             message: "Access token refreshed successfully.",
             data: { accessToken },
@@ -114,9 +115,9 @@ export const getMe = async (
     next: NextFunction,
 ) => {
     try {
-        const userId = (req.user as any).id;
-        const user = await authService.getMeService(userId);
-        res.status(200).json({
+        const user = req.user!;
+
+        return res.status(200).json({
             success: true,
             message: "Profile retrieved successfully.",
             data: { user },
@@ -136,7 +137,7 @@ export const verifyEmail = async (
         const { user, accessToken, rawRefreshToken } =
             await authService.verifyEmailService(req.body);
         setRefreshTokenCookie(res, rawRefreshToken);
-        res.status(200).json({
+        return res.status(200).json({
             success: true,
             message: "Email verified successfully.",
             data: { accessToken, user },
@@ -153,7 +154,8 @@ export const resendVerification = async (
 ) => {
     try {
         await authService.resendVerificationService(req.body);
-        res.status(200).json({
+
+        return res.status(200).json({
             success: true,
             message:
                 "If an unverified account exists for this email, a new code has been sent.",
@@ -173,10 +175,13 @@ const handleOAuthCallback = async (
     next: NextFunction,
 ) => {
     try {
-        const result = req.user as authService.SafeUser;
+        const user = req.user as AuthUser;
+
         const tokens = await authService.issueTokenPair(
-            result.id,
-            result.email,
+            user.id,
+            user.name,
+            user.email,
+            user.plan,
         );
         setRefreshTokenCookie(res, tokens.rawRefreshToken);
 

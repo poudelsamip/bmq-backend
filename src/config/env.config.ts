@@ -40,6 +40,8 @@ export const envSchema = z.object({
     // email (resend provider)
     RESEND_API_KEY: z.string(),
     EMAIL_FROM: z.string(),
+
+    ENCRYPTION_KEY: z.string().length(64),
 });
 
 const parsed = envSchema.safeParse(process.env);

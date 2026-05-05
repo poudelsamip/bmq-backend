@@ -3,7 +3,6 @@ import {
     Strategy as GoogleStrategy,
     StrategyOptions as GoogleStrategyOptions,
     Profile as GoogleProfile,
-    VerifyCallback,
 } from "passport-google-oauth20";
 import {
     Strategy as GitHubStrategy,
@@ -12,6 +11,9 @@ import {
 import { env } from "./env.config";
 import { AuthProvider } from "../entities/User.entity";
 import { oauthLoginService } from "../modules/auth/auth.service";
+import { AuthUser } from "../interfaces/auth.interface";
+
+type OAuthDone = (err: any, user?: AuthUser | false, info?: any) => void;
 
 // google
 const googleOptions: GoogleStrategyOptions = {
@@ -27,14 +29,13 @@ passport.use(
             _accessToken: string,
             _refreshToken: string,
             profile: GoogleProfile,
-            done: VerifyCallback,
+            done: OAuthDone,
         ) => {
             try {
                 const email = profile.emails?.[0]?.value;
                 if (!email) {
                     return done(null, false, {
-                        message:
-                            "No email returned from Google. Please ensure your Google account has a verified email.",
+                        message: "No email returned from Google.",
                     });
                 }
 
@@ -47,13 +48,13 @@ passport.use(
 
                 done(null, result);
             } catch (err) {
-                done(null, false, { message: (err as Error).message });
+                done(err);
             }
         },
     ),
 );
 
-//github
+// github
 passport.use(
     new GitHubStrategy(
         {
@@ -65,18 +66,18 @@ passport.use(
             _accessToken: string,
             _refreshToken: string,
             profile: GitHubProfile,
-            done: VerifyCallback,
+            done: OAuthDone,
         ) => {
             try {
-                // GitHub may return multiple emails; prefer the primary verified one
                 const emailObj =
-                    profile.emails?.find((e) => e.value) ?? profile.emails?.[0];
+                    profile.emails?.find((e) => e.value) ??
+                    profile.emails?.[0];
+
                 const email = emailObj?.value;
 
                 if (!email) {
                     return done(null, false, {
-                        message:
-                            "No email returned from GitHub. Please make your GitHub email public or grant email access.",
+                        message: "No email returned from GitHub.",
                     });
                 }
 
@@ -92,7 +93,7 @@ passport.use(
 
                 done(null, result);
             } catch (err) {
-                done(null, false, { message: (err as Error).message });
+                done(err);
             }
         },
     ),

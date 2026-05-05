@@ -14,9 +14,8 @@ export class RefreshToken {
     @PrimaryGeneratedColumn("uuid")
     id: string;
 
-    //sha-256 hash
     @Index()
-    @Column({ type: "varchar", length: 64, unique: true })
+    @Column({ type: "varchar", unique: true })
     tokenHash: string;
 
     @Column({ type: "uuid" })
@@ -34,6 +33,6 @@ export class RefreshToken {
     @Column({ type: "boolean", default: false })
     isRevoked: boolean;
 
-    @CreateDateColumn()
+    @CreateDateColumn({ type: "timestamptz" })
     createdAt: Date;
 }
