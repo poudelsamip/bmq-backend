@@ -20,7 +20,7 @@ export const errorHandler = (
             success: false,
             message: err.message,
             data: null,
-            ...(env.NODE_ENV === "development" && { stack: err.stack }),
+            // ...(env.NODE_ENV === "development" && { stack: err.stack }),
         });
         return;
     }
@@ -65,6 +65,6 @@ export const errorHandler = (
         success: false,
         message: "An unexpected error occurred. Please try again later.",
         data: null,
-        ...(env.NODE_ENV === "development" && { stack: err.stack }),
+        // ...(env.NODE_ENV === "development" && { stack: err.stack }),
     });
 };

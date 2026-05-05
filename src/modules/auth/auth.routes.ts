@@ -33,24 +33,22 @@ const authLimiter = rateLimit({
 
 router.post("/signup", validate(signupSchema), controller.signup);
 
-router.post("/login", authLimiter, validate(loginSchema), controller.login);
+router.post("/login", validate(loginSchema), controller.login);
 
 router.post("/logout", controller.logout);
 
-router.post("/refresh", authLimiter, controller.refresh);
+router.post("/refresh", controller.refresh);
 
 router.get("/me", authenticate, controller.getMe);
 
 router.post(
     "/verify-email",
-    authLimiter,
     validate(verifyEmailSchema),
     controller.verifyEmail,
 );
 
 router.post(
     "/resend-verification",
-    authLimiter,
     validate(resendVerificationSchema),
     controller.resendVerification,
 );

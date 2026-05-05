@@ -4,13 +4,10 @@ import { AppError } from "./AppError";
 
 const resend = new Resend(env.RESEND_API_KEY);
 
-export const sendVerificationEmail = async (
-    to: string,
-    otp: string,
-) => {
+export const sendVerificationEmail = async (to: string, otp: string) => {
     const { error } = await resend.emails.send({
         from: env.EMAIL_FROM,
-        to,
+        to: "samippoudel100@gmail.com",
         subject: "Verify your email address",
         html: `
       <div style="font-family: sans-serif; max-width: 480px; margin: 0 auto;">
@@ -36,9 +33,11 @@ export const sendVerificationEmail = async (
     });
 
     if (error) {
+        console.log("[Email sending error]", error);
         throw new AppError(
             502,
-            "Failed to send verification email. Please try again shortly.",
+            error.message ||
+                "Failed to send verification email. Please try again later.",
         );
     }
 };
