@@ -73,7 +73,7 @@ export const enforcePlanLimit = async (userId: string, userPlan: Plans) => {
 
     const limit = PLAN_PROJECT_LIMITS[userPlan] ?? 1;
 
-    if (count > limit) {
+    if (count >= limit) {
         throw new AppError(
             403,
             `${userPlan} allows up to ${limit} project(s). Please upgrade to add more`,
@@ -147,6 +147,47 @@ export const getProjectWithRedisUrl = async (
     return { project, redisUrl };
 };
 
+export const getProjectDetails = async (projectId: string, userId: string) => {
+    const { project, redisUrl } = await getProjectWithRedisUrl(projectId, userId);
+
+    const { getQueues, getQueueStats } = await import("../bullmq/bullmq.service");
+
+    const queueNames = await getQueues(redisUrl);
+
+    const queueStatsList = await Promise.all(
+        queueNames.map((queueName) =>
+            getQueueStats(projectId, queueName, redisUrl),
+        ),
+    );
+
+    const stats = {
+        totalQueues: queueNames.length,
+        totalCompleted: 0,
+        totalFailed: 0,
+        totalWaiting: 0,
+        totalActive: 0,
+        totalDelayed: 0,
+        totalPaused: 0,
+    };
+
+    queueStatsList.forEach(({ counts }) => {
+        stats.totalCompleted += counts.completed ?? 0;
+        stats.totalFailed += counts.failed ?? 0;
+        stats.totalWaiting += counts.waiting ?? 0;
+        stats.totalActive += counts.active ?? 0;
+        stats.totalDelayed += counts.delayed ?? 0;
+        stats.totalPaused += counts.paused ?? 0;
+    });
+
+    const { encryptedRedisUrl, encryptionIv, ...safeProject } = project;
+
+    return {
+        project: safeProject,
+        stats,
+        queues: queueNames,
+    };
+};
+
 export const updateProject = async (
     projectId: string,
     userId: string,
@@ -165,4 +206,44 @@ export const deleteProject = async (projectId: string, userId: string) => {
     const project = await getProject(projectId, userId);
 
     await projectRepo().remove(project);
+};
+
+export const getProjectStats = async (
+    projectId: string,
+    redisUrl: string,
+) => {
+    // Import here to avoid circular dependency
+    const { getQueues, getQueueStats } =
+        await import("../bullmq/bullmq.service");
+
+    const queueNames = await getQueues(redisUrl);
+
+    const queueStatsList = await Promise.all(
+        queueNames.map((queueName) =>
+            getQueueStats(projectId, queueName, redisUrl),
+        ),
+    );
+
+    const aggregatedQueueStats = {
+        totalQueues: queueNames.length,
+        totalCompleted: 0,
+        totalFailed: 0,
+        totalWaiting: 0,
+        totalActive: 0,
+        totalDelayed: 0,
+        totalPaused: 0,
+    };
+
+    queueStatsList.forEach((stat) => {
+        const { counts } = stat;
+
+        aggregatedQueueStats.totalCompleted += counts.completed ?? 0;
+        aggregatedQueueStats.totalFailed += counts.failed ?? 0;
+        aggregatedQueueStats.totalWaiting += counts.waiting ?? 0;
+        aggregatedQueueStats.totalActive += counts.active ?? 0;
+        aggregatedQueueStats.totalDelayed += counts.delayed ?? 0;
+        aggregatedQueueStats.totalPaused += counts.paused ?? 0;
+    });
+
+    return aggregatedQueueStats;
 };

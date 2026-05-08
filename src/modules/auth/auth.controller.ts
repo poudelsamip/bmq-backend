@@ -96,13 +96,15 @@ export const refresh = async (
                 new AppError(401, "No refresh token provided. Please log in."),
             );
         }
-        const { accessToken, rawRefreshToken } =
+        const { user, tokenPair } =
             await authService.refreshService(rawToken);
-        setRefreshTokenCookie(res, rawRefreshToken);
+            
+        setRefreshTokenCookie(res, tokenPair.rawRefreshToken);
+
         return res.status(200).json({
             success: true,
             message: "Access token refreshed successfully.",
-            data: { accessToken },
+            data: { accessToken: tokenPair.accessToken, user },
         });
     } catch (err) {
         next(err);

@@ -55,19 +55,12 @@ export const getProject = async (
         const userId = req.user!.id;
         const projectId = req.params.id;
 
-        const project = await ProjectService.getProject(projectId, userId);
-
-        const safeProject = {
-            id: project.id,
-            name: project.name,
-            userId: project.userId,
-            createdAt: project.createdAt,
-        };
+        const project = await ProjectService.getProjectDetails(projectId, userId);
 
         return res.status(200).json({
             success: true,
             message: "Project fetched successfully",
-            data: safeProject,
+            data: project,
         });
     } catch (error) {
         next(error);
@@ -96,6 +89,35 @@ export const updateProject = async (
         });
     } catch (err) {
         next(err);
+    }
+};
+
+export const getProjectStats = async (
+    req: Request<{ id: string }>,
+    res: Response,
+    next: NextFunction,
+) => {
+    try {
+        const userId = req.user!.id;
+        const projectId = req.params.id;
+
+        const { redisUrl } = await ProjectService.getProjectWithRedisUrl(
+            projectId,
+            userId,
+        );
+
+        const stats = await ProjectService.getProjectStats(
+            projectId,
+            redisUrl,
+        );
+
+        return res.status(200).json({
+            success: true,
+            message: "Project stats fetched successfully",
+            data: stats,
+        });
+    } catch (error) {
+        next(error);
     }
 };
 

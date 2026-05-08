@@ -1,6 +1,7 @@
-import { Job, Queue } from "bullmq";
+import { Job, JobType, Queue } from "bullmq";
 import IORedis from "ioredis";
 import { getCachedQueue } from "./connection.cache";
+import { AppError } from "../../utils/AppError";
 
 // BullMQ stores data in Redis using this key pattern:
 //      bull:{queueName}:meta       — metadata about the queue
@@ -10,7 +11,7 @@ import { getCachedQueue } from "./connection.cache";
 //      bull:{queueName}:completed  — sorted set of completed job IDs
 //      bull:{queueName}:1          — hash containing full job data
 
-export const findQueues = async (redisUrl: string) => {
+export const getQueues = async (redisUrl: string) => {
     const client = new IORedis(redisUrl, {
         maxRetriesPerRequest: 1,
         enableReadyCheck: false,
@@ -31,6 +32,7 @@ export const findQueues = async (redisUrl: string) => {
     }
 };
 
+// returns job counts for all states of a queue
 export const getQueueStats = async (
     projectId: string,
     queueName: string,
@@ -57,11 +59,80 @@ export type JobState =
     | "failed"
     | "delayed";
 
+export type JobStateFilter = JobState | JobState[] | "all";
+
+export const getJobDetails = async (
+    projectId: string,
+    queueName: string,
+    redisUrl: string,
+    jobId: string,
+) => {
+    const queue = getCachedQueue(projectId, queueName, redisUrl);
+
+    const job = await queue.getJob(jobId);
+
+    if (!job) {
+        throw new AppError(404, "Job not found");
+    }
+
+    const [state, logs] = await Promise.all([
+        job.getState(),
+        queue.getJobLogs(job.id!, 0, 50), // limit logs
+    ]);
+
+    const duration =
+        job.finishedOn && job.processedOn
+            ? job.finishedOn - job.processedOn
+            : null;
+
+    return {
+        id: job.id,
+        name: job.name,
+        queueName: job.queueName,
+        state,
+
+        payload: job.data,
+        result: job.returnvalue,
+
+        error: {
+            message: job.failedReason,
+            stack: job.stacktrace,
+        },
+
+        attempts: {
+            made: job.attemptsMade,
+            max: job.opts?.attempts,
+        },
+
+        timing: {
+            createdAt: job.timestamp,
+            processedAt: job.processedOn,
+            finishedAt: job.finishedOn,
+            duration,
+        },
+
+        config: {
+            delay: job.opts?.delay,
+            priority: job.opts?.priority,
+            backoff: job.opts?.backoff,
+            removeOnComplete: job.opts?.removeOnComplete,
+            removeOnFail: job.opts?.removeOnFail,
+        },
+
+        relations: {
+            parent: job.parent,
+        },
+
+        progress: job.progress,
+        logs: logs.logs,
+    };
+};
+
 export const getJobs = async (
     projectId: string,
     queueName: string,
     redisUrl: string,
-    state: JobState,
+    state: JobStateFilter = "all",
     page: number = 0,
     pageSize = 50,
 ) => {
@@ -70,21 +141,80 @@ export const getJobs = async (
     const start = page * pageSize;
     const end = start + pageSize - 1;
 
-    const jobs = await queue.getJobs([state], start, end);
+    const states: JobType[] =
+        state === "all"
+            ? ["waiting", "active", "completed", "failed", "delayed"]
+            : Array.isArray(state)
+              ? state
+              : [state];
 
-    return jobs.map((job) => ({
-        id: job.id,
-        name: job.name,
-        data: job.data,
-        returnValue: job.returnvalue,
-        failedReason: job.failedReason,
-        stackTrace: job.stacktrace,
-        attemptsMade: job.attemptsMade,
-        timestamp: job.timestamp,
-        processedOn: job.processedOn,
-        finishedOn: job.finishedOn,
-        parent: job.parent,
-    }));
+    const jobs = await queue.getJobs(states, 0, pageSize * (page + 1));
+
+    const sorted = jobs.sort((a, b) => (b.timestamp ?? 0) - (a.timestamp ?? 0));
+
+    const paginated = sorted.slice(start, end + 1);
+
+    const data = paginated.map((job) => {
+        const duration =
+            job.finishedOn && job.processedOn
+                ? job.finishedOn - job.processedOn
+                : null;
+
+        return {
+            id: job.id,
+            name: job.name,
+            queueName: job.queueName,
+
+            state: job.failedReason
+                ? "failed"
+                : job.finishedOn
+                  ? "completed"
+                  : job.processedOn
+                    ? "active"
+                    : "waiting",
+
+            attemptsMade: job.attemptsMade,
+
+            timestamp: job.timestamp,
+            processedOn: job.processedOn,
+            finishedOn: job.finishedOn,
+            duration,
+
+            // minimal error info for table
+            failedReason: job.failedReason,
+
+            // useful for UI linking
+            parent: job.parent,
+
+            isFailed: !!job.failedReason,
+            isCompleted: !!job.finishedOn,
+        };
+    });
+
+    return {
+        jobs: data,
+        pagination: { page, pageSize, hasMore: sorted.length > end + 1 },
+    };
+};
+
+export const retryJob = async (
+    projectId: string,
+    queueName: string,
+    redisUrl: string,
+    jobId: string,
+) => {
+    const queue = getCachedQueue(projectId, queueName, redisUrl);
+
+    const job = await queue.getJob(jobId);
+
+    if (!job) {
+        throw new AppError(400, "Job not found");
+    }
+
+    // moves from failed to waiting
+    await job.retry();
+
+    return { success: true };
 };
 
 type TreeNode = {
@@ -136,72 +266,10 @@ export const buildFlowTree = async (
 
     const rootJob = await queue.getJob(rootJobId);
     if (!rootJob) {
-        throw new Error("Root job not found");
+        throw new AppError(404, "Root job not found");
     }
 
     const tree = await buildNode(rootJob, queueName);
 
     return tree;
 };
-
-//CLAUDE
-/*
-export async function buildFlowTree(
-    projectId: string,
-    redisUrl: string,
-    queueNames: string[]
-) {
-    // Step 1 — collect all failed jobs from all queues.
-    // We focus on failed jobs because that's when the tree view is most useful —
-    // seeing which part of a multi-step flow broke.
-    const allJobs: any[] = [];
- 
-    for (const queueName of queueNames) {
-        const jobs = await getJobs(projectId, queueName, redisUrl, "failed", 0, 200);
-        // Tag each job with its queue name so the UI knows where it lives
-        allJobs.push(...jobs.map((j) => ({ ...j, queueName })));
-    }
- 
-    // Step 2 — build a Map of jobId → job for O(1) parent lookups.
-    // Without this, finding a parent would require scanning the array every time.
-    const jobMap = new Map(allJobs.map((job) => [job.id, job]));
- 
-    // Step 3 — group children under their parent ID.
-    // childrenMap: parentId → [child, child, ...]
-    const childrenMap = new Map<string, any[]>();
-    const roots: any[] = [];
- 
-    for (const job of allJobs) {
-        if (job.parent?.id) {
-            // This job has a parent — add it to the parent's children list
-            if (!childrenMap.has(job.parent.id)) {
-                childrenMap.set(job.parent.id, []);
-            }
-            childrenMap.get(job.parent.id)!.push(job);
-        } else {
-            // No parent = this is a root node of a flow
-            roots.push(job);
-        }
-    }
- 
-    // Step 4 — recursively build the tree structure.
-    // buildNode calls itself for each child, which calls itself for each
-    // grandchild, and so on — until we reach leaves (jobs with no children).
-    function buildNode(job: any): any {
-        return {
-            id: job.id,
-            name: job.name,
-            queueName: job.queueName,
-            failedReason: job.failedReason,
-            attemptsMade: job.attemptsMade,
-            timestamp: job.timestamp,
-            // Recursively attach children — empty array if this is a leaf node
-            children: (childrenMap.get(job.id) ?? []).map(buildNode),
-        };
-    }
- 
-    // Build from all roots — returns an array of trees
-    // Each tree represents one top-level flow that had failures somewhere
-    return roots.map(buildNode);
-}
- */

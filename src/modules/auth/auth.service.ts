@@ -329,7 +329,8 @@ export const oauthLoginService = async (
     return { id, name, email, plan };
 };
 
-export const refreshService = async (rawToken: string): Promise<TokenPair> => {
+export const refreshService = async (rawToken: string)
+: Promise<{user: AuthUser, tokenPair: TokenPair }> => {
     let payload: ReturnType<typeof verifyRefreshToken>;
     try {
         payload = verifyRefreshToken(rawToken);
@@ -357,12 +358,15 @@ export const refreshService = async (rawToken: string): Promise<TokenPair> => {
 
     await tokenRepo().update(record.id, { isRevoked: true });
 
-    const user = await userRepo().findOne({ where: { id: payload.sub } });
-    if (!user) {
+    const u = await userRepo().findOne({ where: { id: payload.sub } });
+    if (!u) {
         throw new AppError(401, "Account not found. Please log in again.");
     }
 
-    return issueTokenPair(user.id, user.name, user.email, user.plan);
+    const user = sanitize(u);
+    const tokenPair = await issueTokenPair(user.id, user.name, user.email, user.plan);
+
+    return { user, tokenPair };
 };
 
 export const logoutService = async (rawToken: string) => {

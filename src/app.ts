@@ -10,7 +10,9 @@ import { AppDataSource } from "./config/db.config";
 import "./config/passport.config";
 import authRoutes from "./modules/auth/auth.routes";
 import projectRoutes from "./modules/projects/project.routes";
+import bullmqRoutes from "./modules/bullmq/bullmq.routes";
 import { errorHandler } from "./middleware/error.middleware";
+import { evictStaleConnection } from "./modules/bullmq/connection.cache";
 
 const app = express();
 
@@ -18,7 +20,7 @@ app.use(helmet());
 app.use(
     cors({
         origin: env.FRONTEND_URL,
-        credentials: true, // allows cookies to be sent cross-origin
+        credentials: true,
         methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
         allowedHeaders: ["Content-Type", "Authorization"],
     }),
@@ -30,6 +32,7 @@ app.use(cookieParser());
 
 app.use("/api/auth", authRoutes);
 app.use("/api/project", projectRoutes);
+app.use("/api/project/:projectId/queues", bullmqRoutes);
 
 // Health check
 app.get("/health", (_req, res) => {
@@ -48,6 +51,8 @@ app.use((_req, res) => {
         data: null,
     });
 });
+
+setInterval(evictStaleConnection, 5 * 60 * 1000);
 
 app.use(errorHandler);
 

@@ -1,0 +1,256 @@
+import { Request, Response, NextFunction, RequestHandler } from "express";
+import { getProjectWithRedisUrl } from "../projects/project.service";
+import * as BullMQService from "./bullmq.service";
+import {
+    GetFlowTreeParams,
+    GetJobDetailsParams,
+    GetJobsParams,
+    GetJobsQuery,
+    RetryJobParams,
+} from "./bullmq.schema";
+
+export const getRedisUrl = async (req: Request<any, any, any, any>) => {
+    const projectId = req.params.id;
+    const userId = req.user?.id;
+
+    const { redisUrl } = await getProjectWithRedisUrl(projectId, userId!);
+
+    return { projectId, redisUrl };
+};
+
+// GET /api/projects/:projectId/queues
+export const getQueues = async (
+    req: Request,
+    res: Response,
+    next: NextFunction,
+) => {
+    try {
+        const { redisUrl } = await getRedisUrl(req);
+
+        const queues = await BullMQService.getQueues(redisUrl);
+
+        return res.status(200).json({
+            success: true,
+            message: "Queue names fetched successfully",
+            data: queues,
+        });
+    } catch (error) {
+        next(error);
+    }
+};
+
+// GET /api/projects/:projectId/queues/:queueName/stats
+export const getQueueStats = async (
+    req: Request,
+    res: Response,
+    next: NextFunction,
+) => {
+    try {
+        const { projectId, redisUrl } = await getRedisUrl(req);
+        const { queueName } = req.params;
+
+        const stats = await BullMQService.getQueueStats(
+            projectId,
+            queueName,
+            redisUrl,
+        );
+
+        return res.status(200).json({
+            success: true,
+            message: "Queue stats fetched successfully",
+            data: stats,
+        });
+    } catch (error) {
+        next(error);
+    }
+};
+
+// GET /api/projects/:projectId/queues/:queueName/jobs
+export const getJobs = (async (
+    req: Request<GetJobsParams, {}, {}, GetJobsQuery>,
+    res: Response,
+    next: NextFunction,
+) => {
+    try {
+        const { projectId, redisUrl } = await getRedisUrl(req);
+        const { queueName } = req.params;
+        const { state, page, pageSize } = req.query;
+
+        const jobs = await BullMQService.getJobs(
+            projectId,
+            queueName,
+            redisUrl,
+            state,
+            page,
+            pageSize,
+        );
+
+        return res.status(200).json({
+            success: true,
+            message: "Jobs fetched successfully",
+            data: jobs,
+        });
+    } catch (error) {
+        next(error);
+    }
+}) as unknown as RequestHandler;
+
+// GET /api/projects/:projectId/queues/:queueName/jobs/:jobId
+export const getJobDetails = async (
+    req: Request<GetJobDetailsParams>,
+    res: Response,
+    next: NextFunction,
+) => {
+    try {
+        const { projectId, redisUrl } = await getRedisUrl(req);
+        const { queueName, jobId } = req.params;
+
+        const job = await BullMQService.getJobDetails(
+            projectId,
+            queueName,
+            redisUrl,
+            jobId,
+        );
+
+        return res.status(200).json({
+            success: true,
+            message: "Job details fetched successfully",
+            data: job,
+        });
+    } catch (error) {
+        next(error);
+    }
+};
+
+// POST /api/projects/:projectId/queues/:queueName/jobs/:jobId/retry
+export const retryJob = (async (
+    req: Request<RetryJobParams, {}, {}, GetJobsQuery>,
+    res: Response,
+    next: NextFunction,
+) => {
+    try {
+        const { projectId, redisUrl } = await getRedisUrl(req);
+        const { queueName, jobId } = req.params;
+
+        const result = await BullMQService.retryJob(
+            projectId,
+            queueName,
+            redisUrl,
+            jobId,
+        );
+
+        if (!result.success) {
+            return res.status(400).json({
+                success: false,
+                message:
+                    "Job could not be retried. It may already be active or completed.",
+            });
+        }
+
+        return res.status(200).json({
+            success: true,
+            message:
+                "Job has been successfully moved to the waiting queue for retry.",
+        });
+    } catch (error) {
+        next(error);
+    }
+}) as unknown as RequestHandler;
+
+// GET /api/projects/:projectId/queues/:queueName/jobs/:jobId/flow-tree
+
+// Returns the full parent-child job tree across all queues.
+// shows how a multi-step BullMQ flow broke down,
+// which child failed, and what the error was.
+
+export const getFlowTree = async (
+    req: Request<GetFlowTreeParams>,
+    res: Response,
+    next: NextFunction,
+) => {
+    try {
+        const { projectId, redisUrl } = await getRedisUrl(req);
+
+        const { queueName, jobId } = req.params;
+
+        const tree = await BullMQService.buildFlowTree(
+            projectId,
+            redisUrl,
+            queueName,
+            jobId,
+        );
+
+        return res.status(200).json({
+            success: true,
+            message: "Flow tree generated successfully",
+            data: tree,
+        });
+    } catch (error) {
+        next(error);
+    }
+};
+
+// GET /api/projects/:projectId/queues/:queueName/stream  (SSE)
+
+// Keeps an HTTP connection open and pushes queue stat updates every 3 seconds.
+// The frontend uses the browser's native EventSource API to consume this.
+
+export async function streamQueueStats(
+    req: Request,
+    res: Response,
+    next: NextFunction,
+): Promise<void> {
+    try {
+        const { projectId, redisUrl } = await getRedisUrl(req);
+        const { queueName } = req.params;
+
+        // These headers transform a normal HTTP response into an SSE stream.
+        res.setHeader("Content-Type", "text/event-stream");
+        res.setHeader("Cache-Control", "no-cache");
+        res.setHeader("Connection", "keep-alive");
+
+        // flushHeaders() sends the headers to the client immediately,
+        // before any data — this opens the stream. Without this the client
+        // would wait until the first data chunk before seeing any headers.
+        res.flushHeaders();
+
+        let lastPayload = "";
+
+        const interval = setInterval(async () => {
+            try {
+                const stats = await BullMQService.getQueueStats(
+                    projectId,
+                    queueName,
+                    redisUrl,
+                );
+                const payload = JSON.stringify(stats);
+
+                // Only send if something actually changed since last push
+                if (payload !== lastPayload) {
+                    // SSE format is strictly: "data: {content}\n\n"
+                    // The double newline (\n\n) signals the end of one event.
+                    // EventSource on the frontend fires an "onmessage" event
+                    // each time it receives a complete event (ending in \n\n).
+                    res.write(`data: ${payload}\n\n`);
+                    lastPayload = payload;
+                }
+            } catch {
+                // If Redis becomes unreachable mid-stream, send an error event
+                // and let the client handle it gracefully
+                res.write(
+                    `event: error\ndata: {"message":"Failed to fetch stats"}\n\n`,
+                );
+            }
+        }, 3000); // poll every 3 seconds
+
+        // When the user closes the browser tab or navigates away,
+        // the "close" event fires on the request. We clean up here —
+        // clear the interval so we stop polling Redis for a dead connection.
+        req.on("close", () => {
+            clearInterval(interval);
+            res.end();
+        });
+    } catch (err) {
+        next(err);
+    }
+}
