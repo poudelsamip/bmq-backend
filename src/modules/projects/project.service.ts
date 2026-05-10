@@ -64,7 +64,7 @@ export const decryptRedisUrl = (encryptedBase64: string, ivHex: string) => {
 };
 
 const PLAN_PROJECT_LIMITS: Record<Plans, number> = {
-    [Plans.FREE]: 1,
+    [Plans.FREE]: 2,
     [Plans.PRO]: 5,
 };
 
@@ -148,9 +148,13 @@ export const getProjectWithRedisUrl = async (
 };
 
 export const getProjectDetails = async (projectId: string, userId: string) => {
-    const { project, redisUrl } = await getProjectWithRedisUrl(projectId, userId);
+    const { project, redisUrl } = await getProjectWithRedisUrl(
+        projectId,
+        userId,
+    );
 
-    const { getQueues, getQueueStats } = await import("../bullmq/bullmq.service");
+    const { getQueues, getQueueStats } =
+        await import("../bullmq/bullmq.service");
 
     const queueNames = await getQueues(redisUrl);
 
@@ -195,7 +199,12 @@ export const updateProject = async (
 ) => {
     const project = await getProject(projectId, userId);
 
-    project.name = dto.name;
+    if (dto.name) {
+        project.name = dto.name;
+    }
+    if (dto.description) {
+        project.description = dto.description;
+    }
     const saved = await projectRepo().save(project);
 
     const { encryptedRedisUrl, encryptionIv, ...safeData } = saved;
@@ -208,10 +217,7 @@ export const deleteProject = async (projectId: string, userId: string) => {
     await projectRepo().remove(project);
 };
 
-export const getProjectStats = async (
-    projectId: string,
-    redisUrl: string,
-) => {
+export const getProjectStats = async (projectId: string, redisUrl: string) => {
     // Import here to avoid circular dependency
     const { getQueues, getQueueStats } =
         await import("../bullmq/bullmq.service");

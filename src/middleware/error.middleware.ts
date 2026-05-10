@@ -3,8 +3,20 @@ import { AppError } from "../utils/AppError";
 import { env } from "../config/env.config";
 import { ZodError } from "zod";
 
-// PostgreSQL error codes
-const PG_UNIQUE_VIOLATION = "23505";
+const PG_NOT_NULL_VIOLATION = "23502";
+
+// Redis connection error names (ioredis)
+const REDIS_CONNECTION_ERRORS = new Set([
+    "SocketClosedUnexpectedlyError",
+    "ConnectionRefusedError",
+    "ReconnectFailedError",
+    "MaxRetriesPerRequestError",
+    "ConnectionTimeoutError",
+    "FailedToRefreshSlotsError",
+]);
+
+const isDev = env.NODE_ENV === "development";
+const devMeta = (err: Error) => (isDev ? { stack: err.stack } : {});
 
 export const errorHandler = (
     err: Error & { code?: string; statusCode?: number },
@@ -12,15 +24,14 @@ export const errorHandler = (
     res: Response,
     _next: NextFunction,
 ): void => {
-    console.error("[ERROR]\n");
-    console.log(err);
+    console.error("[ERROR]", err);
 
     if (err instanceof AppError) {
         res.status(err.statusCode).json({
             success: false,
             message: err.message,
             data: null,
-            // ...(env.NODE_ENV === "development" && { stack: err.stack }),
+            ...devMeta(err),
         });
         return;
     }
@@ -30,14 +41,16 @@ export const errorHandler = (
             success: false,
             message: "Validation failed",
             errors: err.flatten().fieldErrors,
+            data: null,
+            ...devMeta(err),
         });
         return;
     }
 
-    if (err.code === PG_UNIQUE_VIOLATION) {
-        res.status(409).json({
+    if (err.code === PG_NOT_NULL_VIOLATION) {
+        res.status(400).json({
             success: false,
-            message: "A record with this information already exists.",
+            message: "A required field is missing.",
             data: null,
         });
         return;
@@ -61,10 +74,33 @@ export const errorHandler = (
         return;
     }
 
+    // redis errors
+
+    const isClosed = err.message.toLowerCase().includes("connection is closed");
+
+    if (
+        REDIS_CONNECTION_ERRORS.has(err.name) ||
+        isClosed ||
+        err.code === "ECONNREFUSED"
+    ) {
+        res.status(503).json({
+            success: false,
+            message: isClosed
+                ? "Your redis connection is closed. Please make sure your redis connection is open."
+                : "Redis connection is unavailable.",
+
+            data: null,
+            // ...devMeta(err),
+        });
+        return;
+    }
+
     res.status(500).json({
         success: false,
-        message: "An unexpected error occurred. Please try again later.",
+        message: isDev
+            ? err.message
+            : "An unexpected error occurred. Please try again later.",
         data: null,
-        // ...(env.NODE_ENV === "development" && { stack: err.stack }),
+        ...devMeta(err),
     });
 };

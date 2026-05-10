@@ -31,6 +31,8 @@ export const createProjectSchema = z.object({
                 },
                 { message: "Redis URL must be a valid URL with a hostname" },
             ),
+
+        description: z.string().trim().optional(),
     }),
 });
 
@@ -45,7 +47,9 @@ export const updateProjectSchema = z.object({
             .string({ required_error: "Project name is required" })
             .trim()
             .min(1, "Project name cannot be empty")
-            .max(50, "Project name can have max 50 characters"),
+            .max(50, "Project name can have max 50 characters")
+            .optional(),
+        description: z.string().trim().optional(),
     }),
 });
 

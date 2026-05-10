@@ -16,6 +16,9 @@ export class Project {
     @Column({ type: "varchar" })
     name: string;
 
+    @Column({ type: "text", nullable: true })
+    description: string | null;
+
     @ManyToOne(() => User, { onDelete: "CASCADE" })
     @JoinColumn({ name: "userId" })
     user: User;

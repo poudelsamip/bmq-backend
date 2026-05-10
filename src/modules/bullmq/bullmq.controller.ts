@@ -241,7 +241,7 @@ export async function streamQueueStats(
                     `event: error\ndata: {"message":"Failed to fetch stats"}\n\n`,
                 );
             }
-        }, 3000); // poll every 3 seconds
+        }, 1000); // poll every 3 seconds
 
         // When the user closes the browser tab or navigates away,
         // the "close" event fires on the request. We clean up here —
