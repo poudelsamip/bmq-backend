@@ -7,6 +7,13 @@ import {
     GetJobsParams,
     GetJobsQuery,
     RetryJobParams,
+    RemoveJobParams,
+    RetryAllFailedParams,
+    RetrySelectedParams,
+    RetrySelectedBody,
+    CleanJobsParams,
+    CleanJobsBody,
+    DrainQueueParams,
 } from "./bullmq.schema";
 
 export const getRedisUrl = async (req: Request<any, any, any, any>) => {
@@ -254,3 +261,213 @@ export async function streamQueueStats(
         next(err);
     }
 }
+
+// POST /api/projects/:projectId/queues/:queueName/pause
+export const pauseQueueController = async (
+    req: Request,
+    res: Response,
+    next: NextFunction,
+) => {
+    try {
+        const { projectId, redisUrl } = await getRedisUrl(req);
+        const { queueName } = req.params;
+
+        const result = await BullMQService.pauseQueue(
+            projectId,
+            queueName,
+            redisUrl,
+        );
+
+        return res.status(200).json({
+            success: true,
+            message: "Queue paused successfully",
+            data: result,
+        });
+    } catch (error) {
+        next(error);
+    }
+};
+
+// POST /api/projects/:projectId/queues/:queueName/resume
+export const resumeQueueController = async (
+    req: Request,
+    res: Response,
+    next: NextFunction,
+) => {
+    try {
+        const { projectId, redisUrl } = await getRedisUrl(req);
+        const { queueName } = req.params;
+
+        const result = await BullMQService.resumeQueue(
+            projectId,
+            queueName,
+            redisUrl,
+        );
+
+        return res.status(200).json({
+            success: true,
+            message: "Queue resumed successfully",
+            data: result,
+        });
+    } catch (error) {
+        next(error);
+    }
+};
+
+// ── New Tier 1 controllers ────────────────────────────────────────────────────
+
+// DELETE /api/projects/:projectId/queues/:queueName/jobs/:jobId
+export const removeJobController = (async (
+    req: Request<RemoveJobParams>,
+    res: Response,
+    next: NextFunction,
+) => {
+    try {
+        const { projectId, redisUrl } = await getRedisUrl(req);
+        const { queueName, jobId } = req.params;
+
+        await BullMQService.removeJob(projectId, queueName, redisUrl, jobId);
+
+        return res.status(200).json({
+            success: true,
+            message: "Job removed successfully",
+        });
+    } catch (error) {
+        next(error);
+    }
+}) as unknown as RequestHandler;
+
+// POST /api/projects/:projectId/queues/:queueName/jobs/retry-all
+export const retryAllFailedJobsController = (async (
+    req: Request<RetryAllFailedParams>,
+    res: Response,
+    next: NextFunction,
+) => {
+    try {
+        const { projectId, redisUrl } = await getRedisUrl(req);
+        const { queueName } = req.params;
+
+        const summary = await BullMQService.retryAllFailedJobs(
+            projectId,
+            queueName,
+            redisUrl,
+        );
+
+        return res.status(200).json({
+            success: true,
+            message: `Retry complete. ${summary.retried} retried, ${summary.failed} failed.`,
+            data: summary,
+        });
+    } catch (error) {
+        next(error);
+    }
+}) as unknown as RequestHandler;
+
+// POST /api/projects/:projectId/queues/:queueName/jobs/retry-selected
+export const retrySelectedJobsController = (async (
+    req: Request<RetrySelectedParams, {}, RetrySelectedBody>,
+    res: Response,
+    next: NextFunction,
+) => {
+    try {
+        const { projectId, redisUrl } = await getRedisUrl(req);
+        const { queueName } = req.params;
+        const { jobIds } = req.body;
+
+        const summary = await BullMQService.retrySelectedJobs(
+            projectId,
+            queueName,
+            redisUrl,
+            jobIds,
+        );
+
+        return res.status(200).json({
+            success: true,
+            message: `Retry complete. ${summary.retried} retried, ${summary.skipped} skipped, ${summary.failed} failed.`,
+            data: summary,
+        });
+    } catch (error) {
+        next(error);
+    }
+}) as unknown as RequestHandler;
+
+// POST /api/projects/:projectId/queues/:queueName/clean/completed
+export const cleanCompletedJobsController = (async (
+    req: Request<CleanJobsParams, {}, CleanJobsBody>,
+    res: Response,
+    next: NextFunction,
+) => {
+    try {
+        const { projectId, redisUrl } = await getRedisUrl(req);
+        const { queueName } = req.params;
+        const { grace, limit } = req.body;
+
+        const result = await BullMQService.cleanJobs(
+            projectId,
+            queueName,
+            redisUrl,
+            "completed",
+            grace,
+            limit,
+        );
+
+        return res.status(200).json({
+            success: true,
+            message: `Removed ${result.removed} completed job(s).`,
+            data: result,
+        });
+    } catch (error) {
+        next(error);
+    }
+}) as unknown as RequestHandler;
+
+// POST /api/projects/:projectId/queues/:queueName/clean/failed
+export const cleanFailedJobsController = (async (
+    req: Request<CleanJobsParams, {}, CleanJobsBody>,
+    res: Response,
+    next: NextFunction,
+) => {
+    try {
+        const { projectId, redisUrl } = await getRedisUrl(req);
+        const { queueName } = req.params;
+        const { grace, limit } = req.body;
+
+        const result = await BullMQService.cleanJobs(
+            projectId,
+            queueName,
+            redisUrl,
+            "failed",
+            grace,
+            limit,
+        );
+
+        return res.status(200).json({
+            success: true,
+            message: `Removed ${result.removed} failed job(s).`,
+            data: result,
+        });
+    } catch (error) {
+        next(error);
+    }
+}) as unknown as RequestHandler;
+
+// POST /api/projects/:projectId/queues/:queueName/drain
+export const drainQueueController = (async (
+    req: Request<DrainQueueParams>,
+    res: Response,
+    next: NextFunction,
+) => {
+    try {
+        const { projectId, redisUrl } = await getRedisUrl(req);
+        const { queueName } = req.params;
+
+        await BullMQService.drainQueue(projectId, queueName, redisUrl);
+
+        return res.status(200).json({
+            success: true,
+            message: "Queue drained successfully. Waiting jobs have been removed.",
+        });
+    } catch (error) {
+        next(error);
+    }
+}) as unknown as RequestHandler;

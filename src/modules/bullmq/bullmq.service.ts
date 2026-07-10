@@ -40,16 +40,19 @@ export const getQueueStats = async (
 ) => {
     const queue = getOrCreateQueue(projectId, queueName, redisUrl);
 
-    const counts = await queue.getJobCounts(
-        "waiting",
-        "active",
-        "completed",
-        "failed",
-        "delayed",
-        "paused",
-    );
+    const [counts, isPaused] = await Promise.all([
+        queue.getJobCounts(
+            "waiting",
+            "active",
+            "completed",
+            "failed",
+            "delayed",
+            "paused",
+        ),
+        queue.isPaused(),
+    ]);
 
-    return { queueName, counts };
+    return { queueName, counts, isPaused };
 };
 
 export type JobState =
@@ -270,4 +273,196 @@ export const buildFlowTree = async (
     const tree = await buildNode(rootJob, queueName);
 
     return tree;
+};
+
+export const pauseQueue = async (
+    projectId: string,
+    queueName: string,
+    redisUrl: string,
+) => {
+    const queue = getOrCreateQueue(projectId, queueName, redisUrl);
+
+    await queue.pause();
+
+    return { success: true };
+};
+
+export const resumeQueue = async (
+    projectId: string,
+    queueName: string,
+    redisUrl: string,
+) => {
+    const queue = getOrCreateQueue(projectId, queueName, redisUrl);
+
+    await queue.resume();
+
+    return { success: true };
+};
+
+// ── New Tier 1 service functions ──────────────────────────────────────────────
+
+export const removeJob = async (
+    projectId: string,
+    queueName: string,
+    redisUrl: string,
+    jobId: string,
+) => {
+    const queue = getOrCreateQueue(projectId, queueName, redisUrl);
+
+    const job = await queue.getJob(jobId);
+
+    if (!job) {
+        throw new AppError(404, "Job not found");
+    }
+
+    await job.remove();
+
+    return { success: true };
+};
+
+export type RetryAllSummary = {
+    total: number;
+    retried: number;
+    skipped: number;
+    failed: number;
+};
+
+export const retryAllFailedJobs = async (
+    projectId: string,
+    queueName: string,
+    redisUrl: string,
+): Promise<RetryAllSummary> => {
+    const queue = getOrCreateQueue(projectId, queueName, redisUrl);
+
+    const failedJobs = await queue.getFailed();
+
+    const results = await Promise.allSettled(
+        failedJobs.map((job) => job.retry()),
+    );
+
+    let retried = 0;
+    let failed = 0;
+
+    for (const result of results) {
+        if (result.status === "fulfilled") {
+            retried++;
+        } else {
+            failed++;
+        }
+    }
+
+    return {
+        total: failedJobs.length,
+        retried,
+        skipped: 0,
+        failed,
+    };
+};
+
+export type JobRetryOutcome = {
+    jobId: string;
+    status: "retried" | "skipped" | "failed";
+    reason?: string;
+};
+
+export type RetrySelectedSummary = {
+    total: number;
+    retried: number;
+    skipped: number;
+    failed: number;
+    results: JobRetryOutcome[];
+};
+
+export const retrySelectedJobs = async (
+    projectId: string,
+    queueName: string,
+    redisUrl: string,
+    jobIds: string[],
+): Promise<RetrySelectedSummary> => {
+    const queue = getOrCreateQueue(projectId, queueName, redisUrl);
+
+    // Deduplicate job IDs while preserving order
+    const uniqueIds = [...new Set(jobIds)];
+
+    const outcomes = await Promise.allSettled(
+        uniqueIds.map(async (id): Promise<JobRetryOutcome> => {
+            const job = await queue.getJob(id);
+
+            if (!job) {
+                return { jobId: id, status: "skipped", reason: "Job not found" };
+            }
+
+            const state = await job.getState();
+            if (state !== "failed") {
+                return {
+                    jobId: id,
+                    status: "skipped",
+                    reason: `Job is in state "${state}", not "failed"`,
+                };
+            }
+
+            await job.retry();
+            return { jobId: id, status: "retried" };
+        }),
+    );
+
+    const results: JobRetryOutcome[] = [];
+    let retried = 0;
+    let skipped = 0;
+    let failed = 0;
+
+    for (const outcome of outcomes) {
+        if (outcome.status === "fulfilled") {
+            results.push(outcome.value);
+            if (outcome.value.status === "retried") retried++;
+            else skipped++;
+        } else {
+            // Promise itself rejected (unexpected error)
+            failed++;
+            results.push({
+                jobId: "unknown",
+                status: "failed",
+                reason: String(outcome.reason),
+            });
+        }
+    }
+
+    return {
+        total: uniqueIds.length,
+        retried,
+        skipped,
+        failed,
+        results,
+    };
+};
+
+export type CleanJobsResult = {
+    removed: number;
+};
+
+export const cleanJobs = async (
+    projectId: string,
+    queueName: string,
+    redisUrl: string,
+    type: "completed" | "failed",
+    grace = 0,
+    limit = 0,
+): Promise<CleanJobsResult> => {
+    const queue = getOrCreateQueue(projectId, queueName, redisUrl);
+
+    const removed = await queue.clean(grace, limit, type);
+
+    return { removed: removed.length };
+};
+
+export const drainQueue = async (
+    projectId: string,
+    queueName: string,
+    redisUrl: string,
+) => {
+    const queue = getOrCreateQueue(projectId, queueName, redisUrl);
+
+    await queue.drain();
+
+    return { success: true };
 };
