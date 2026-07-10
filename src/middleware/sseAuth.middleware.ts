@@ -4,7 +4,7 @@ import { AppDataSource } from "../config/db.config";
 import { User } from "../entities/User.entity";
 import { AppError } from "../utils/AppError";
 
-export const authenticateAuth = async (
+export const sseAuth = async (
     req: Request,
     res: Response,
     next: NextFunction,

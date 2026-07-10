@@ -1,6 +1,6 @@
 import { Job, JobType, Queue } from "bullmq";
 import IORedis from "ioredis";
-import { getCachedQueue } from "./connection.cache";
+import { getOrCreateQueue } from "./connection.cache";
 import { AppError } from "../../utils/AppError";
 
 // BullMQ stores data in Redis using this key pattern:
@@ -38,7 +38,7 @@ export const getQueueStats = async (
     queueName: string,
     redisUrl: string,
 ) => {
-    const queue = getCachedQueue(projectId, queueName, redisUrl);
+    const queue = getOrCreateQueue(projectId, queueName, redisUrl);
 
     const counts = await queue.getJobCounts(
         "waiting",
@@ -67,7 +67,7 @@ export const getJobDetails = async (
     redisUrl: string,
     jobId: string,
 ) => {
-    const queue = getCachedQueue(projectId, queueName, redisUrl);
+    const queue = getOrCreateQueue(projectId, queueName, redisUrl);
 
     const job = await queue.getJob(jobId);
 
@@ -136,7 +136,7 @@ export const getJobs = async (
     page: number = 0,
     pageSize = 50,
 ) => {
-    const queue = getCachedQueue(projectId, queueName, redisUrl);
+    const queue = getOrCreateQueue(projectId, queueName, redisUrl);
 
     const start = page * pageSize;
     const end = start + pageSize - 1;
@@ -154,42 +154,40 @@ export const getJobs = async (
 
     const paginated = sorted.slice(start, end + 1);
 
-    const data = paginated.map((job) => {
-        const duration =
-            job.finishedOn && job.processedOn
-                ? job.finishedOn - job.processedOn
-                : null;
+    const data = await Promise.all(
+        paginated.map(async (job) => {
+            const duration =
+                job.finishedOn && job.processedOn
+                    ? job.finishedOn - job.processedOn
+                    : null;
+            
+            const state = await job.getState();
 
-        return {
-            id: job.id,
-            name: job.name,
-            queueName: job.queueName,
+            return {
+                id: job.id,
+                name: job.name,
+                queueName: job.queueName,
 
-            state: job.failedReason
-                ? "failed"
-                : job.finishedOn
-                  ? "completed"
-                  : job.processedOn
-                    ? "active"
-                    : "waiting",
+                state,
 
-            attemptsMade: job.attemptsMade,
+                attemptsMade: job.attemptsMade,
 
-            timestamp: job.timestamp,
-            processedOn: job.processedOn,
-            finishedOn: job.finishedOn,
-            duration,
+                timestamp: job.timestamp,
+                processedOn: job.processedOn,
+                finishedOn: job.finishedOn,
+                duration,
 
-            // minimal error info for table
-            failedReason: job.failedReason,
+                // minimal error info for table
+                failedReason: job.failedReason,
 
-            // useful for UI linking
-            parent: job.parent,
+                // useful for UI linking
+                parent: job.parent,
 
-            isFailed: !!job.failedReason,
-            isCompleted: !!job.finishedOn,
-        };
-    });
+                isFailed: state === "failed",
+                isCompleted: state === "completed",
+            };
+        }),
+    );
 
     return {
         jobs: data,
@@ -203,7 +201,7 @@ export const retryJob = async (
     redisUrl: string,
     jobId: string,
 ) => {
-    const queue = getCachedQueue(projectId, queueName, redisUrl);
+    const queue = getOrCreateQueue(projectId, queueName, redisUrl);
 
     const job = await queue.getJob(jobId);
 
@@ -262,7 +260,7 @@ export const buildFlowTree = async (
     queueName: string,
     rootJobId: string,
 ) => {
-    const queue = getCachedQueue(projectId, queueName, redisUrl);
+    const queue = getOrCreateQueue(projectId, queueName, redisUrl);
 
     const rootJob = await queue.getJob(rootJobId);
     if (!rootJob) {

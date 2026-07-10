@@ -10,7 +10,7 @@ import {
     retryJobSchema,
     streamQueueStatsSchema,
 } from "./bullmq.schema";
-import { authenticateAuth } from "../../middleware/sseAuth.middleware";
+import { sseAuth } from "../../middleware/sseAuth.middleware";
 
 const router = Router({ mergeParams: true });
 
@@ -50,7 +50,7 @@ router.get(
 
 router.get(
     "/:queueName/stream",
-    authenticateAuth,
+    sseAuth,
     validate(streamQueueStatsSchema),
     BullMQController.streamQueueStats,
 );

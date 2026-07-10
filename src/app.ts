@@ -12,7 +12,7 @@ import authRoutes from "./modules/auth/auth.routes";
 import projectRoutes from "./modules/projects/project.routes";
 import bullmqRoutes from "./modules/bullmq/bullmq.routes";
 import { errorHandler } from "./middleware/error.middleware";
-import { evictStaleConnection } from "./modules/bullmq/connection.cache";
+import { evictStaleConnections } from "./modules/bullmq/connection.cache";
 
 const app = express();
 
@@ -52,7 +52,7 @@ app.use((_req, res) => {
     });
 });
 
-setInterval(evictStaleConnection, 5 * 60 * 1000);
+setInterval(evictStaleConnections, 5 * 60 * 1000);
 
 app.use(errorHandler);
 
