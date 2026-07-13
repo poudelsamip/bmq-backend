@@ -21,7 +21,7 @@ import { sseAuth } from "../../middleware/sseAuth.middleware";
 
 const router = Router({ mergeParams: true });
 
-// router.use(authenticate);
+router.use(authenticate);
 
 router.get("/", BullMQController.getQueues);
 
@@ -56,6 +56,12 @@ router.get(
 );
 
 router.get(
+    "/stream",
+    sseAuth,
+    BullMQController.streamAllQueuesStats,
+);
+
+router.get(
     "/:queueName/stream",
     sseAuth,
     validate(streamQueueStatsSchema),
@@ -73,8 +79,6 @@ router.post(
     validate(resumeQueueSchema),
     BullMQController.resumeQueueController,
 );
-
-// ── New Tier 1 routes ─────────────────────────────────────────────────────────
 
 // DELETE /:queueName/jobs/:jobId
 router.delete(

@@ -15,6 +15,7 @@ import {
     CleanJobsBody,
     DrainQueueParams,
 } from "./bullmq.schema";
+import IORedis from "ioredis";
 
 export const getRedisUrl = async (req: Request<any, any, any, any>) => {
     const projectId = req.params.id;
@@ -196,6 +197,58 @@ export const getFlowTree = async (
         next(error);
     }
 };
+
+// GET /api/projects/:projectId/queues/stream  (SSE)
+// Keeps an HTTP connection open and pushes all queue stat updates every 1 second.
+// Also records throughput snapshots and includes throughput data in the payload.
+export async function streamAllQueuesStats(
+    req: Request,
+    res: Response,
+    next: NextFunction,
+): Promise<void> {
+    try {
+        const { projectId, redisUrl } = await getRedisUrl(req);
+
+        res.setHeader("Content-Type", "text/event-stream");
+        res.setHeader("Cache-Control", "no-cache");
+        res.setHeader("Connection", "keep-alive");
+        res.flushHeaders();
+
+        let lastPayload = "";
+
+        const interval = setInterval(async () => {
+            try {
+                // 1. Get all queues
+                const queues = await BullMQService.getQueues(redisUrl);
+                
+                // 2. Get stats for all queues in parallel
+                const statsPromises = queues.map((q) =>
+                    BullMQService.getQueueStats(projectId, q, redisUrl)
+                );
+                
+                const statsArray = await Promise.all(statsPromises);
+
+                const payload = JSON.stringify(statsArray);
+
+                if (payload !== lastPayload) {
+                    res.write(`data: ${payload}\n\n`);
+                    lastPayload = payload;
+                }
+            } catch {
+                res.write(
+                    `event: error\ndata: {"message":"Failed to fetch stats"}\n\n`,
+                );
+            }
+        }, 1000);
+
+        req.on("close", async () => {
+            clearInterval(interval);
+            res.end();
+        });
+    } catch (err) {
+        next(err);
+    }
+}
 
 // GET /api/projects/:projectId/queues/:queueName/stream  (SSE)
 

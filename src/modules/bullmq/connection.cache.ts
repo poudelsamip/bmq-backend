@@ -61,8 +61,13 @@ export const getOrCreateQueue = (
     redisUrl: string,
 ) => {
     if (!projectConnectionCache.has(projectId)) {
+        const redisConnection = new IORedis(redisUrl);
+        redisConnection.on("error", (err) => {
+            console.error(`[Project ${projectId}] Redis connection error:`, err.message);
+        });
+
         projectConnectionCache.set(projectId, {
-            redisConnection: new IORedis(redisUrl),
+            redisConnection,
             queues: new Map(),
             lastAccessedAt: Date.now(),
         });

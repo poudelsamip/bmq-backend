@@ -31,9 +31,9 @@ const authLimiter = rateLimit({
     legacyHeaders: false,
 });
 
-router.post("/signup", validate(signupSchema), controller.signup);
+router.post("/signup", authLimiter, validate(signupSchema), controller.signup);
 
-router.post("/login", validate(loginSchema), controller.login);
+router.post("/login", authLimiter, validate(loginSchema), controller.login);
 
 router.post("/logout", authenticate, controller.logout);
 
@@ -43,6 +43,7 @@ router.get("/me", authenticate, controller.getMe);
 
 router.post(
     "/verify-email",
+    authLimiter,
     validate(verifyEmailSchema),
     controller.verifyEmail,
 );

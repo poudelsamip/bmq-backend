@@ -15,19 +15,41 @@ export const getQueues = async (redisUrl: string) => {
     const client = new IORedis(redisUrl, {
         maxRetriesPerRequest: 1,
         enableReadyCheck: false,
-        lazyConnect: true, // only connect after we call a command
+        lazyConnect: true,
+        retryStrategy: () => null,
     });
+
+    client.on("error", () => {}); // Catch and ignore unhandled errors during probing
 
     try {
         await client.connect();
 
-        const keys = await client.keys("bull:*:meta");
+        const queues = new Set<string>();
+        let cursor = "0";
 
-        const queues = keys.map((key) => key.split(":")[1]);
+        do {
+            const [nextCursor, keys] = await client.scan(
+                cursor,
+                "MATCH",
+                "bull:*:meta",
+                "COUNT",
+                100,
+            );
 
-        return queues;
+            for (const key of keys) {
+                const parts = key.split(":");
+
+                // bull:{queueName}:meta
+                if (parts.length >= 3) {
+                    queues.add(parts[1]);
+                }
+            }
+
+            cursor = nextCursor;
+        } while (cursor !== "0");
+
+        return [...queues];
     } finally {
-        // we close connection no matter it ran successfully or error occurred
         await client.quit();
     }
 };
@@ -236,13 +258,38 @@ const getStatus = (job: Job) => {
     return "waiting";
 };
 
-const buildNode = async (job: Job, queueName: string): Promise<TreeNode> => {
-    const children = await job.getChildrenValues();
+const buildNode = async (
+    job: Job,
+    queueName: string,
+    projectId: string,
+    redisUrl: string,
+): Promise<TreeNode> => {
+    // getDependencies() returns the raw Redis keys of child jobs in the form:
+    //   bull:{queueName}:{jobId}
+    // getChildrenValues() returns the *return values* of completed children,
+    // not Job objects — so we must NOT use it to recurse.
+    const deps = await job.getDependencies({ processed: {} });
+    const childKeys = Object.keys(deps.processed ?? {});
 
     const childNodes = await Promise.all(
-        Object.values(children).map((child: Job) =>
-            buildNode(child, child.queueName),
-        ),
+        childKeys.map(async (key) => {
+            // key format: "bull:{queueName}:{jobId}"
+            const parts = key.split(":");
+            // queueName may itself contain ":", so rejoin everything between
+            // the first "bull:" prefix and the last segment (the jobId).
+            const childJobId = parts[parts.length - 1];
+            const childQueueName = parts.slice(1, parts.length - 1).join(":");
+
+            const childQueue = getOrCreateQueue(
+                projectId,
+                childQueueName,
+                redisUrl,
+            );
+            const childJob = await childQueue.getJob(childJobId);
+            if (!childJob) return null;
+
+            return buildNode(childJob, childQueueName, projectId, redisUrl);
+        }),
     );
 
     return {
@@ -253,7 +300,7 @@ const buildNode = async (job: Job, queueName: string): Promise<TreeNode> => {
         failedReason: job.failedReason,
         attemptsMade: job.attemptsMade,
         timestamp: job.timestamp,
-        children: childNodes,
+        children: childNodes.filter((n): n is TreeNode => n !== null),
     };
 };
 
@@ -270,7 +317,7 @@ export const buildFlowTree = async (
         throw new AppError(404, "Root job not found");
     }
 
-    const tree = await buildNode(rootJob, queueName);
+    const tree = await buildNode(rootJob, queueName, projectId, redisUrl);
 
     return tree;
 };
