@@ -13,6 +13,7 @@ export const envSchema = z.object({
     DB_USERNAME: z.string().min(1, "DB_USERNAME is required"),
     DB_PASSWORD: z.string().min(1, "DB_PASSWORD is required"),
     DB_NAME: z.string().min(1, "DB_NAME is required"),
+    DB_URL: z.string().url().min(1, "DB_URL is required"),
 
     // jwt
     JWT_ACCESS_SECRET: z.string().min(32),
@@ -36,6 +37,7 @@ export const envSchema = z.object({
 
     // frontend
     FRONTEND_URL: z.string().url().default("http://localhost:5173"),
+    BACKEND_URL: z.string().url().default("http://localhost:3000"),
 
     // email (resend provider)
     RESEND_API_KEY: z.string(),
