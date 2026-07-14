@@ -196,3 +196,79 @@ const handleOAuthCallback = async (
 
 export const googleCallback = handleOAuthCallback;
 export const githubCallback = handleOAuthCallback;
+
+// settings: update display name
+export const updateProfile = async (
+    req: Request,
+    res: Response,
+    next: NextFunction,
+) => {
+    try {
+        const user = await authService.updateProfileService(req.user!.id, req.body);
+        return res.status(200).json({
+            success: true,
+            message: "Profile updated successfully.",
+            data: { user },
+        });
+    } catch (err) {
+        next(err);
+    }
+};
+
+// settings: change password
+export const updatePassword = async (
+    req: Request,
+    res: Response,
+    next: NextFunction,
+) => {
+    try {
+        await authService.updatePasswordService(req.user!.id, req.body);
+        return res.status(200).json({
+            success: true,
+            message: "Password updated successfully.",
+            data: null,
+        });
+    } catch (err) {
+        next(err);
+    }
+};
+
+// settings: get notification preferences
+export const getNotifications = async (
+    req: Request,
+    res: Response,
+    next: NextFunction,
+) => {
+    try {
+        const preferences = await authService.getNotificationsService(req.user!.id);
+        return res.status(200).json({
+            success: true,
+            message: "Notification preferences retrieved.",
+            data: { preferences },
+        });
+    } catch (err) {
+        next(err);
+    }
+};
+
+// settings: update notification preferences (Pro only)
+export const updateNotifications = async (
+    req: Request,
+    res: Response,
+    next: NextFunction,
+) => {
+    try {
+        const preferences = await authService.updateNotificationsService(
+            req.user!.id,
+            req.user!.plan,
+            req.body,
+        );
+        return res.status(200).json({
+            success: true,
+            message: "Notification preferences saved.",
+            data: { preferences },
+        });
+    } catch (err) {
+        next(err);
+    }
+};

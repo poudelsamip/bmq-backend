@@ -15,7 +15,6 @@ import {
     CleanJobsBody,
     DrainQueueParams,
 } from "./bullmq.schema";
-import IORedis from "ioredis";
 
 export const getRedisUrl = async (req: Request<any, any, any, any>) => {
     const projectId = req.params.id;

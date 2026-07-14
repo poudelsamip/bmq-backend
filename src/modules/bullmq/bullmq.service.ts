@@ -50,7 +50,9 @@ export const getQueues = async (redisUrl: string) => {
 
         return [...queues];
     } finally {
-        await client.quit();
+        // Use disconnect instead of quit to avoid throwing "Connection is closed"
+        // and swallowing the original connection error (e.g. WRONGPASS)
+        client.disconnect();
     }
 };
 

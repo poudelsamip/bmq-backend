@@ -60,4 +60,10 @@ router.get("/google/callback", googleAuthCallback, controller.googleCallback);
 router.get("/github", githubAuth);
 router.get("/github/callback", githubAuthCallback, controller.githubCallback);
 
+// settings
+router.patch("/me/profile", authenticate, controller.updateProfile);
+router.patch("/me/password", authenticate, controller.updatePassword);
+router.get("/me/notifications", authenticate, controller.getNotifications);
+router.patch("/me/notifications", authenticate, controller.updateNotifications);
+
 export default router;

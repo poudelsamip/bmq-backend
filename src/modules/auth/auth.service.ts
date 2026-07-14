@@ -309,8 +309,7 @@ export const oauthLoginService = async (
             );
         }
 
-        const { id, name, email, plan } = existing;
-        return { id, name, email, plan };
+        return sanitize(existing);
     }
 
     // new user
@@ -325,8 +324,7 @@ export const oauthLoginService = async (
         }),
     );
 
-    const { id, name, email, plan } = user;
-    return { id, name, email, plan };
+    return sanitize(user);
 };
 
 export const refreshService = async (rawToken: string)
@@ -389,4 +387,104 @@ export const cleanupExpiredTokens = async () => {
         .where("isRevoked = true OR expiresAt < :now", { now: new Date() })
         .execute();
     return result.affected ?? 0;
+};
+
+// settings: update display name only
+export const updateProfileService = async (
+    userId: string,
+    dto: { name: string },
+): Promise<AuthUser> => {
+    const user = await userRepo().findOne({ where: { id: userId } });
+    if (!user) throw new AppError(404, "Account not found.");
+
+    const trimmed = dto.name.trim();
+    if (trimmed.length < 2 || trimmed.length > 50) {
+        throw new AppError(400, "Name must be between 2 and 50 characters.");
+    }
+
+    user.name = trimmed;
+    const saved = await userRepo().save(user);
+    return sanitize(saved);
+};
+
+// settings: change password
+export const updatePasswordService = async (
+    userId: string,
+    dto: { currentPassword: string; newPassword: string },
+): Promise<void> => {
+    const user = await userRepo()
+        .createQueryBuilder("user")
+        .addSelect("user.password")
+        .where("user.id = :id", { id: userId })
+        .getOne();
+
+    if (!user) throw new AppError(404, "Account not found.");
+
+    if (user.authProvider !== AuthProvider.LOCAL) {
+        const label = PROVIDER_LABEL[user.authProvider] ?? user.authProvider;
+        throw new AppError(
+            400,
+            `Your account uses ${label} sign-in. Password changes are not available.`,
+        );
+    }
+
+    if (!user.password) {
+        throw new AppError(400, "No password set on this account.");
+    }
+
+    const isValid = await bcrypt.compare(dto.currentPassword, user.password);
+    if (!isValid) {
+        throw new AppError(401, "Current password is incorrect.");
+    }
+
+    const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/;
+    if (
+        dto.newPassword.length < 8 ||
+        dto.newPassword.length > 72 ||
+        !passwordRegex.test(dto.newPassword)
+    ) {
+        throw new AppError(
+            400,
+            "New password must be 8-72 characters and contain at least one uppercase letter, one lowercase letter, and one number.",
+        );
+    }
+
+    user.password = await bcrypt.hash(dto.newPassword, 12);
+    await userRepo().save(user);
+};
+
+// settings: get notification preferences
+export const getNotificationsService = async (
+    userId: string,
+): Promise<{ failureAlerts: boolean; weeklyDigest: boolean }> => {
+    const user = await userRepo().findOne({ where: { id: userId } });
+    if (!user) throw new AppError(404, "Account not found.");
+
+    return {
+        failureAlerts: user.notifyFailureAlerts,
+        weeklyDigest: user.notifyWeeklyDigest,
+    };
+};
+
+// settings: update notification preferences (Pro only)
+export const updateNotificationsService = async (
+    userId: string,
+    plan: Plans,
+    dto: { failureAlerts: boolean; weeklyDigest: boolean },
+): Promise<{ failureAlerts: boolean; weeklyDigest: boolean }> => {
+    if (plan !== Plans.PRO) {
+        throw new AppError(403, "Notification preferences are available on the Pro plan only.");
+    }
+
+    const user = await userRepo().findOne({ where: { id: userId } });
+    if (!user) throw new AppError(404, "Account not found.");
+
+    user.notifyFailureAlerts = dto.failureAlerts;
+    user.notifyWeeklyDigest = dto.weeklyDigest;
+    const saved = await userRepo().save(user);
+    
+    return {
+        failureAlerts: saved.notifyFailureAlerts,
+        weeklyDigest: saved.notifyWeeklyDigest,
+    };
 };

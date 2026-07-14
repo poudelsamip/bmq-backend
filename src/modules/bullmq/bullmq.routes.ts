@@ -18,39 +18,44 @@ import {
     drainQueueSchema,
 } from "./bullmq.schema";
 import { sseAuth } from "../../middleware/sseAuth.middleware";
+import { requirePro } from "../../middleware/requriePro.middleware";
 
 const router = Router({ mergeParams: true });
 
-router.use(authenticate);
-
-router.get("/", BullMQController.getQueues);
+router.get("/", authenticate, BullMQController.getQueues);
 
 router.get(
     "/:queueName/stats",
+    authenticate,
     validate(getQueueStatsSchema),
     BullMQController.getQueueStats,
 );
 
 router.get(
     "/:queueName/jobs",
+    authenticate,
     validate(getJobsSchema),
     BullMQController.getJobs,
 );
 
 router.get(
     "/:queueName/jobs/:jobId",
+    authenticate,
     validate(getJobDetailsSchema),
     BullMQController.getJobDetails,
 );
 
 router.post(
     "/:queueName/jobs/:jobId/retry",
+    authenticate,
     validate(retryJobSchema),
     BullMQController.retryJob,
 );
 
 router.get(
     "/:queueName/jobs/:jobId/flow-tree",
+    authenticate,
+    requirePro,
     validate(getFlowTreeSchema),
     BullMQController.getFlowTree,
 );
@@ -70,55 +75,61 @@ router.get(
 
 router.post(
     "/:queueName/pause",
+    authenticate,
     validate(pauseQueueSchema),
     BullMQController.pauseQueueController,
 );
 
 router.post(
     "/:queueName/resume",
+    authenticate,
     validate(resumeQueueSchema),
     BullMQController.resumeQueueController,
 );
 
-// DELETE /:queueName/jobs/:jobId
 router.delete(
     "/:queueName/jobs/:jobId",
+    authenticate,
     validate(removeJobSchema),
     BullMQController.removeJobController,
 );
 
-// POST /:queueName/jobs/retry-all  — must be before /:queueName/jobs/:jobId
-// to avoid Express matching "retry-all" as a :jobId
 router.post(
     "/:queueName/jobs/retry-all",
+    authenticate,
+    requirePro,
     validate(retryAllFailedJobsSchema),
     BullMQController.retryAllFailedJobsController,
 );
 
-// POST /:queueName/jobs/retry-selected
 router.post(
     "/:queueName/jobs/retry-selected",
+    authenticate,
+    requirePro,
     validate(retrySelectedJobsSchema),
     BullMQController.retrySelectedJobsController,
 );
 
-// POST /:queueName/clean/completed
 router.post(
     "/:queueName/clean/completed",
+    authenticate,
+    requirePro,
     validate(cleanJobsSchema),
     BullMQController.cleanCompletedJobsController,
 );
 
-// POST /:queueName/clean/failed
 router.post(
     "/:queueName/clean/failed",
+    authenticate,
+    requirePro,
     validate(cleanJobsSchema),
     BullMQController.cleanFailedJobsController,
 );
 
-// POST /:queueName/drain
 router.post(
     "/:queueName/drain",
+    authenticate,
+    requirePro,
     validate(drainQueueSchema),
     BullMQController.drainQueueController,
 );

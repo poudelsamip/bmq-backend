@@ -67,6 +67,12 @@ export class User {
     @Column({ type: "timestamptz", nullable: true })
     emailVerificationLastSentAt: Date | null;
 
+    @Column({ type: "boolean", default: false })
+    notifyFailureAlerts: boolean;
+
+    @Column({ type: "boolean", default: false })
+    notifyWeeklyDigest: boolean;
+
     @CreateDateColumn({ type: "timestamptz" })
     createdAt: Date;
 

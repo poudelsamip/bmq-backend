@@ -5,6 +5,7 @@ import { createCipheriv, createDecipheriv, randomBytes } from "crypto";
 import { AppDataSource } from "../../config/db.config";
 import { CreateProjectDto, UpdateProjectDto } from "./project.schema";
 import { Plans } from "../../entities/User.entity";
+import { PLAN_PROJECT_LIMITS } from "../../constants/plans";
 
 const ALGORITHM = "aes-256-gcm";
 
@@ -63,10 +64,6 @@ export const decryptRedisUrl = (encryptedBase64: string, ivHex: string) => {
     return decrypted.toString("utf8");
 };
 
-const PLAN_PROJECT_LIMITS: Record<Plans, number> = {
-    [Plans.FREE]: 2,
-    [Plans.PRO]: 5,
-};
 
 export const enforcePlanLimit = async (userId: string, userPlan: Plans) => {
     const count = await projectRepo().count({ where: { userId } });
