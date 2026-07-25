@@ -15,6 +15,7 @@ import { errorHandler } from "./middleware/error.middleware";
 import { evictStaleConnections } from "./modules/bullmq/connection.cache";
 
 const app = express();
+app.set("trust proxy", 1);
 
 app.use(helmet());
 app.use(
