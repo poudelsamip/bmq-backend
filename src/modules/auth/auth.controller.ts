@@ -187,8 +187,9 @@ const handleOAuthCallback = async (
         );
         setRefreshTokenCookie(res, tokens.rawRefreshToken);
 
-        // make frontend call POST /api/auth/refresh immediately to get access token.
-        res.redirect(`${env.FRONTEND_URL}/auth/callback`);
+        // Pass access token in URL so the frontend can read it directly.
+        // Refresh token cookie is also set as a best-effort for silent refresh.
+        res.redirect(`${env.FRONTEND_URL}/auth/callback?token=${encodeURIComponent(tokens.accessToken)}`);
     } catch (err) {
         next(err);
     }
