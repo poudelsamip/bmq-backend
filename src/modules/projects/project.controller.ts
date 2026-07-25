@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from "express";
 import * as ProjectService from "./project.service";
 import { CreateProjectDto, UpdateProjectDto } from "./project.schema";
+import { AuthUser } from "../../interfaces/auth.interface";
 
 export const createProject = async (
     req: Request<{}, {}, CreateProjectDto>,
@@ -8,7 +9,7 @@ export const createProject = async (
     next: NextFunction,
 ) => {
     try {
-        const { id: userId, plan } = req.user!;
+        const { id: userId, plan } = req.user as AuthUser;
 
         const project = await ProjectService.createProject(
             userId,
@@ -32,7 +33,7 @@ export const getProjects = async (
     next: NextFunction,
 ) => {
     try {
-        const userId = req.user!.id;
+        const userId = (req.user as AuthUser).id;
 
         const projects = await ProjectService.getProjects(userId);
 
@@ -52,7 +53,7 @@ export const getProject = async (
     next: NextFunction,
 ) => {
     try {
-        const userId = req.user!.id;
+        const userId = (req.user as AuthUser).id;
         const projectId = req.params.id;
 
         const project = await ProjectService.getProjectDetails(projectId, userId);
@@ -73,7 +74,7 @@ export const updateProject = async (
     next: NextFunction,
 ) => {
     try {
-        const userId = req.user!.id;
+        const userId = (req.user as AuthUser).id;
         const projectId = req.params.id;
 
         const updated = await ProjectService.updateProject(
@@ -98,7 +99,7 @@ export const getProjectStats = async (
     next: NextFunction,
 ) => {
     try {
-        const userId = req.user!.id;
+        const userId = (req.user as AuthUser).id;
         const projectId = req.params.id;
 
         const { redisUrl } = await ProjectService.getProjectWithRedisUrl(
@@ -127,7 +128,7 @@ export const deleteProject = async (
     next: NextFunction,
 ) => {
     try {
-        const userId = req.user!.id;
+        const userId = (req.user as AuthUser).id;
         const projectId = req.params.id;
 
         await ProjectService.deleteProject(projectId, userId);

@@ -15,12 +15,13 @@ import {
     CleanJobsBody,
     DrainQueueParams,
 } from "./bullmq.schema";
+import { AuthUser } from "../../interfaces/auth.interface";
 
 export const getRedisUrl = async (req: Request<any, any, any, any>) => {
     const projectId = req.params.id;
-    const userId = req.user?.id;
+    const userId = (req.user as AuthUser).id;
 
-    const { redisUrl } = await getProjectWithRedisUrl(projectId, userId!);
+    const { redisUrl } = await getProjectWithRedisUrl(projectId, userId);
 
     return { projectId, redisUrl };
 };

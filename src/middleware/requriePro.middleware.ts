@@ -1,10 +1,11 @@
 import { NextFunction, Request, Response } from "express";
 import { AppError } from "../utils/AppError";
 import { Plans } from "../entities/User.entity";
+import { AuthUser } from "../interfaces/auth.interface";
 
 export const requirePro = async (req: Request, res: Response, next: NextFunction) => {
     try {
-        const user = req.user;
+        const user = req.user as AuthUser;
 
         if (!user) {
             throw new AppError(401, "authentication required")

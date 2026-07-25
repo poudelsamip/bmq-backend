@@ -117,7 +117,7 @@ export const getMe = async (
     next: NextFunction,
 ) => {
     try {
-        const user = req.user!;
+        const user = req.user as AuthUser;
 
         return res.status(200).json({
             success: true,
@@ -204,7 +204,8 @@ export const updateProfile = async (
     next: NextFunction,
 ) => {
     try {
-        const user = await authService.updateProfileService(req.user!.id, req.body);
+        const authUser = req.user as AuthUser;
+        const user = await authService.updateProfileService(authUser.id, req.body);
         return res.status(200).json({
             success: true,
             message: "Profile updated successfully.",
@@ -222,7 +223,8 @@ export const updatePassword = async (
     next: NextFunction,
 ) => {
     try {
-        await authService.updatePasswordService(req.user!.id, req.body);
+        const authUser = req.user as AuthUser;
+        await authService.updatePasswordService(authUser.id, req.body);
         return res.status(200).json({
             success: true,
             message: "Password updated successfully.",
@@ -240,7 +242,8 @@ export const getNotifications = async (
     next: NextFunction,
 ) => {
     try {
-        const preferences = await authService.getNotificationsService(req.user!.id);
+        const authUser = req.user as AuthUser;
+        const preferences = await authService.getNotificationsService(authUser.id);
         return res.status(200).json({
             success: true,
             message: "Notification preferences retrieved.",
@@ -258,9 +261,10 @@ export const updateNotifications = async (
     next: NextFunction,
 ) => {
     try {
+        const authUser = req.user as AuthUser;
         const preferences = await authService.updateNotificationsService(
-            req.user!.id,
-            req.user!.plan,
+            authUser.id,
+            authUser.plan,
             req.body,
         );
         return res.status(200).json({

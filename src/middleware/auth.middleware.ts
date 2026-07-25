@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from "express";
 import { AppError } from "../utils/AppError";
 import { verifyAccessToken } from "../utils/jwt.utils";
+import { AuthUser } from "../interfaces/auth.interface";
 
 export const authenticate = (
     req: Request,
@@ -26,7 +27,7 @@ export const authenticate = (
             name: payload.name,
             email: payload.email,
             plan: payload.plan,
-        };
+        } as AuthUser;
 
         next();
     } catch (error) {
