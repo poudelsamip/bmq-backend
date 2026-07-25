@@ -162,6 +162,8 @@ export const getJobs = async (
     state: JobStateFilter = "all",
     page: number = 0,
     pageSize = 50,
+    /** Optional hard cap on total jobs returned — used to enforce free-tier limits */
+    jobLimit?: number,
 ) => {
     const queue = getOrCreateQueue(projectId, queueName, redisUrl);
 
@@ -175,11 +177,20 @@ export const getJobs = async (
               ? state
               : [state];
 
-    const jobs = await queue.getJobs(states, 0, pageSize * (page + 1));
+    // Fetch enough jobs to cover the page (or the hard cap, whichever is smaller)
+    const fetchSize = jobLimit !== undefined
+        ? Math.min(jobLimit, pageSize * (page + 1))
+        : pageSize * (page + 1);
 
+    const jobs = await queue.getJobs(states, 0, fetchSize);
+
+    // Sort newest-first so free-tier users always see the most recent jobs
     const sorted = jobs.sort((a, b) => (b.timestamp ?? 0) - (a.timestamp ?? 0));
 
-    const paginated = sorted.slice(start, end + 1);
+    // Apply the hard cap *before* pagination so the limit is enforced server-side
+    const capped = jobLimit !== undefined ? sorted.slice(0, jobLimit) : sorted;
+
+    const paginated = capped.slice(start, end + 1);
 
     const data = await Promise.all(
         paginated.map(async (job) => {
@@ -187,7 +198,7 @@ export const getJobs = async (
                 job.finishedOn && job.processedOn
                     ? job.finishedOn - job.processedOn
                     : null;
-            
+
             const state = await job.getState();
 
             return {
@@ -218,7 +229,7 @@ export const getJobs = async (
 
     return {
         jobs: data,
-        pagination: { page, pageSize, hasMore: sorted.length > end + 1 },
+        pagination: { page, pageSize, hasMore: capped.length > end + 1 },
     };
 };
 

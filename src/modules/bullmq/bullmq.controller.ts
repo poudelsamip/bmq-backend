@@ -16,6 +16,7 @@ import {
     DrainQueueParams,
 } from "./bullmq.schema";
 import { AuthUser } from "../../interfaces/auth.interface";
+import { Plans } from "../../entities/User.entity";
 
 export const getRedisUrl = async (req: Request<any, any, any, any>) => {
     const projectId = req.params.id;
@@ -84,6 +85,10 @@ export const getJobs = (async (
         const { queueName } = req.params;
         const { state, page, pageSize } = req.query;
 
+        // Enforce free-tier job visibility limit server-side
+        const user = req.user as AuthUser;
+        const jobLimit = user.plan === Plans.PRO ? undefined : 30;
+
         const jobs = await BullMQService.getJobs(
             projectId,
             queueName,
@@ -91,6 +96,7 @@ export const getJobs = (async (
             state,
             page,
             pageSize,
+            jobLimit,
         );
 
         return res.status(200).json({

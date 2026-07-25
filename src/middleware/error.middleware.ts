@@ -37,9 +37,13 @@ export const errorHandler = (
     }
 
     if (err instanceof ZodError) {
+        // Extract the first specific error message instead of a generic one
+        const firstError = err.errors[0];
+        const errorMessage = firstError ? firstError.message : "Validation failed";
+
         res.status(400).json({
             success: false,
-            message: "Validation failed",
+            message: errorMessage,
             errors: err.flatten().fieldErrors,
             data: null,
             ...devMeta(err),

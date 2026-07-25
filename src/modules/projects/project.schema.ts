@@ -30,6 +30,26 @@ export const createProjectSchema = z.object({
                     }
                 },
                 { message: "Redis URL must be a valid URL with a hostname" },
+            )
+            .refine(
+                (url) => {
+                    try {
+                        if (process.env.NODE_ENV === "production") {
+                            const parsed = new URL(url);
+                            const forbiddenHosts = ["localhost", "127.0.0.1", "0.0.0.0", "::1"];
+                            if (forbiddenHosts.includes(parsed.hostname.toLowerCase())) {
+                                return false;
+                            }
+                        }
+                        return true;
+                    } catch {
+                        return false;
+                    }
+                },
+                {
+                    message:
+                        "The Redis URL points to your local machine. Bull Console runs on a remote server and cannot connect to services running on your computer. Please enter the connection URL for your hosted Redis instance.",
+                },
             ),
 
         description: z.string().trim().optional(),
